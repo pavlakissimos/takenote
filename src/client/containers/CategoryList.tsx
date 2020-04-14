@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
+import { useDrop } from 'react-dnd'
 import uuid from 'uuid'
-import { Droppable } from 'react-beautiful-dnd'
+import { Motion, spring } from 'react-motion'
 
 import { LabelText } from '@resources/LabelText'
 import { TestID } from '@resources/TestID'
@@ -35,6 +36,15 @@ export const CategoryList: React.FC = () => {
     dispatch(setCategoryEdit({ id: categoryId, tempName }))
   const _updateCategory = (category: CategoryItem) => dispatch(updateCategory(category))
   const _addCategory = (category: CategoryItem) => dispatch(addCategory(category))
+
+  // ===========================================================================
+  // DnD
+  // ===========================================================================
+
+  const [, drop] = useDrop({
+    accept: 'CATEGORY',
+    drop: () => console.log('DROPPED'),
+  })
 
   // ===========================================================================
   // Refs
@@ -135,15 +145,10 @@ export const CategoryList: React.FC = () => {
 
   return (
     <>
-      <Droppable type="CATEGORY" droppableId="Category list">
-        {(droppableProvided) => (
-          <div
-            {...droppableProvided.droppableProps}
-            ref={droppableProvided.innerRef}
-            className="category-list"
-            aria-label="Category list"
-          >
-            {categories.map((category, index) => (
+      <div ref={drop} className="category-list" aria-label="Category list">
+        {categories.map((category, index) => (
+          <Motion key={index} style={{ y: spring(index * 80, { stiffness: 500, damping: 32 }) }}>
+            {({ y }) => (
               <CategoryOption
                 key={category.id}
                 index={index}
@@ -155,12 +160,14 @@ export const CategoryList: React.FC = () => {
                 optionsId={optionsId}
                 setOptionsId={setOptionsId}
                 optionsPosition={optionsPosition}
+                style={{
+                  transform: 'translate3d(0, ' + y + 'px, 0)',
+                }}
               />
-            ))}
-            {droppableProvided.placeholder}
-          </div>
-        )}
-      </Droppable>
+            )}
+          </Motion>
+        ))}
+      </div>
       {addingTempCategory ? (
         <AddCategoryForm
           dataTestID={TestID.NEW_CATEGORY_FORM}

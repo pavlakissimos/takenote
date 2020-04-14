@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { Draggable } from 'react-beautiful-dnd'
+import { useDrag, useDrop } from 'react-dnd'
 import { Folder as FolderIcon, MoreHorizontal } from 'react-feather'
 
 import { TestID } from '@resources/TestID'
@@ -30,6 +30,7 @@ interface CategoryOptionProps {
   optionsPosition: { x: number; y: number }
   optionsId: string
   setOptionsId: React.Dispatch<React.SetStateAction<string>>
+  style?: React.CSSProperties
 }
 
 export const CategoryOption: React.FC<CategoryOptionProps> = ({
@@ -69,88 +70,105 @@ export const CategoryOption: React.FC<CategoryOptionProps> = ({
   const _categoryDragEnter = (category: CategoryItem) => dispatch(categoryDragEnter(category))
   const _categoryDragLeave = (category: CategoryItem) => dispatch(categoryDragLeave(category))
 
+  // ===========================================================================
+  // DnD
+  // ===========================================================================
+
+  const [{ isDragging }, drag] = useDrag({
+    item: { type: 'CATEGORY' },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  })
+  const [, drop] = useDrop({
+    accept: 'NOTES',
+    drop: () => console.log('NOTE DROPPED'),
+  })
+
+  // ===========================================================================
+  // Refs
+  // ===========================================================================
+
+  const ref = useRef<HTMLDivElement>(null)
+
+  drag(drop(ref))
+
   return (
-    <Draggable draggableId={category.id} index={index}>
-      {(draggableProvided, snapshot) => (
-        <div
-          {...draggableProvided.dragHandleProps}
-          {...draggableProvided.draggableProps}
-          ref={draggableProvided.innerRef}
-          data-testid={TestID.CATEGORY_LIST_DIV}
-          className={determineCategoryClass(category, snapshot.isDragging, activeCategoryId)}
-          onClick={() => {
-            const notesForNewCategory = notes.filter(
-              (note) => !note.trash && note.category === category.id
-            )
-            const newNoteId = notesForNewCategory.length > 0 ? notesForNewCategory[0].id : ''
-            if (category.id !== activeCategoryId) {
-              _updateActiveCategoryId(category.id)
-              _updateActiveNote(newNoteId, false)
-            }
-          }}
-          onDoubleClick={() => {
-            _setCategoryEdit(category.id, category.name)
-          }}
-          onBlur={() => {
-            _setCategoryEdit('', '')
-          }}
-          onDrop={(event) => {
-            event.preventDefault()
+    <div
+      ref={ref}
+      data-testid={TestID.CATEGORY_LIST_DIV}
+      className={determineCategoryClass(category, isDragging, activeCategoryId)}
+      onClick={() => {
+        const notesForNewCategory = notes.filter(
+          (note) => !note.trash && note.category === category.id
+        )
+        const newNoteId = notesForNewCategory.length > 0 ? notesForNewCategory[0].id : ''
+        if (category.id !== activeCategoryId) {
+          _updateActiveCategoryId(category.id)
+          _updateActiveNote(newNoteId, false)
+        }
+      }}
+      onDoubleClick={() => {
+        _setCategoryEdit(category.id, category.name)
+      }}
+      onBlur={() => {
+        _setCategoryEdit('', '')
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
 
-            _addCategoryToNote(category.id, event.dataTransfer.getData('text'))
-            _categoryDragLeave(category)
-          }}
-          onDragOver={(event: ReactDragEvent) => event.preventDefault()}
-          onDragEnter={() => _categoryDragEnter(category)}
-          onDragLeave={() => _categoryDragLeave(category)}
-          onContextMenu={(event) => handleCategoryRightClick(event, category.id)}
-        >
-          <form
-            className="category-list-name"
-            onSubmit={(event) => {
-              event.preventDefault()
-              _setCategoryEdit('', '')
-              onSubmitUpdateCategory(event)
+        _addCategoryToNote(category.id, event.dataTransfer.getData('text'))
+        _categoryDragLeave(category)
+      }}
+      onDragOver={(event: ReactDragEvent) => event.preventDefault()}
+      onDragEnter={() => _categoryDragEnter(category)}
+      onDragLeave={() => _categoryDragLeave(category)}
+      onContextMenu={(event) => handleCategoryRightClick(event, category.id)}
+    >
+      <form
+        className="category-list-name"
+        onSubmit={(event) => {
+          event.preventDefault()
+          _setCategoryEdit('', '')
+          onSubmitUpdateCategory(event)
 
-              if (optionsId) setOptionsId('')
+          if (optionsId) setOptionsId('')
+        }}
+      >
+        <FolderIcon size={15} className="app-sidebar-icon" color={iconColor} />
+        {editingCategoryId === category.id ? (
+          <input
+            data-testid={TestID.CATEGORY_EDIT}
+            className="category-edit"
+            type="text"
+            autoFocus
+            maxLength={20}
+            value={tempCategoryName}
+            onChange={(event) => {
+              _setCategoryEdit(editingCategoryId, event.target.value)
             }}
-          >
-            <FolderIcon size={15} className="app-sidebar-icon" color={iconColor} />
-            {editingCategoryId === category.id ? (
-              <input
-                data-testid={TestID.CATEGORY_EDIT}
-                className="category-edit"
-                type="text"
-                autoFocus
-                maxLength={20}
-                value={tempCategoryName}
-                onChange={(event) => {
-                  _setCategoryEdit(editingCategoryId, event.target.value)
-                }}
-                onBlur={(event) => onSubmitUpdateCategory(event)}
-              />
-            ) : (
-              category.name
-            )}
-          </form>
-          <div
-            data-testid={TestID.MOVE_CATEGORY}
-            className={optionsId === category.id ? 'category-options active' : 'category-options'}
-            onClick={(event) => handleCategoryMenuClick(event, category.id)}
-          >
-            <MoreHorizontal size={15} className="context-menu-action" />
-          </div>
-          {optionsId === category.id && (
-            <ContextMenu
-              contextMenuRef={contextMenuRef}
-              item={category}
-              optionsPosition={optionsPosition}
-              setOptionsId={setOptionsId}
-              type={ContextMenuEnum.CATEGORY}
-            />
-          )}
-        </div>
+            onBlur={(event) => onSubmitUpdateCategory(event)}
+          />
+        ) : (
+          category.name
+        )}
+      </form>
+      <div
+        data-testid={TestID.MOVE_CATEGORY}
+        className={optionsId === category.id ? 'category-options active' : 'category-options'}
+        onClick={(event) => handleCategoryMenuClick(event, category.id)}
+      >
+        <MoreHorizontal size={15} className="context-menu-action" />
+      </div>
+      {optionsId === category.id && (
+        <ContextMenu
+          contextMenuRef={contextMenuRef}
+          item={category}
+          optionsPosition={optionsPosition}
+          setOptionsId={setOptionsId}
+          type={ContextMenuEnum.CATEGORY}
+        />
       )}
-    </Draggable>
+    </div>
   )
 }
